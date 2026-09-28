@@ -43,10 +43,8 @@ export async function uploadResume(
   // If it's a raw File, use it directly. If Blob, provide the filename.
   if (file instanceof File) {
     formData.append("resume", file);
-    formData.append("file", file);
   } else {
     formData.append("resume", file, fileName);
-    formData.append("file", file, fileName);
   }
 
   if (options?.recipient) {

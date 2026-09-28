@@ -181,11 +181,12 @@ export default function ResumeUploadSection({
 
     try {
       // Prepare file: use rawFile if available, or create mock sample PDF for sample mode
+      const validSamplePdf = `%PDF-1.4\n1 0 obj <</Type /Catalog /Pages 2 0 R>> endobj\n2 0 obj <</Type /Pages /Kids [3 0 R] /Count 1>> endobj\n3 0 obj <</Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources <<>>>> endobj\n4 0 obj <</Length 62>> stream\nBT\n/F1 12 Tf\n72 712 Td\n(Alex Chen - Staff Software Engineer) Tj\nET\nendstream\nendobj\nxref\n0 5\n0000000000 65535 f \n0000000009 00000 n \n0000000056 00000 n \n0000000113 00000 n \n0000000213 00000 n \ntrailer <</Size 5 /Root 1 0 R>>\nstartxref\n326\n%%EOF`;
       const fileToUpload =
         file.rawFile ||
         new File(
-          [new Blob(["%PDF-1.4 sample resume content for test analysis"], { type: "application/pdf" })],
-          file.name || "resume.pdf",
+          [new Blob([validSamplePdf], { type: "application/pdf" })],
+          file.name || "Alex_Chen_Staff_Engineer_Resume.pdf",
           { type: "application/pdf" }
         );
 
