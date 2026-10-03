@@ -40,7 +40,7 @@ export default function EmailPreviewSection({
       bodyProof: `Over the past 3 years as Staff Engineer at Series B startup, I re-architected our distributed event pipeline, cutting p99 query latency from 850ms to 45ms across 12M daily active sessions (TypeScript/Go/PostgreSQL).`,
       bodyPitch: `I've been mapping out a couple architectural patterns that could eliminate edge cold-starts for your offline-first cache.`,
       cta: `Open to a 5-minute async Loom or a quick sync next Tuesday to see if it's relevant to what you're building?`,
-      signoff: `Best,\nAlex Chen\ngithub.com/alexchen • alex@engineer.dev`,
+      signoff: `Best,\nAlex Chen\ngithub.com/[your-github] • [your-email@domain.com]`,
       highlightNotes: "Extracted: +43% latency reduction, Go/TypeScript stack, Series B experience",
     },
     eng_lead: {
@@ -53,7 +53,7 @@ export default function EmailPreviewSection({
       bodyProof: `At my previous team, I led our migration to an event-driven architecture using Kafka & Go, reducing multi-region database replication lag by 68% while handling 14,000 peak writes/sec.`,
       bodyPitch: `Saw you're expanding the Core Infrastructure team for ${roleName}. I've spent the last 4 years solving exactly these edge synchronization challenges.`,
       cta: `Would love to share our benchmark learnings if you have 10 mins this week. Are you free Thursday morning?`,
-      signoff: `Cheers,\nAlex Chen\nResume attached: alex_chen_cv.pdf`,
+      signoff: `Cheers,\nAlex Chen\nResume attached: [resume.pdf]`,
       highlightNotes: "Extracted: -68% replication lag, Kafka/Go, 14,000 writes/sec metric",
     },
     follow_up: {

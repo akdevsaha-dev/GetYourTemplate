@@ -21,12 +21,23 @@ export interface ColdEmailData {
   [key: string]: unknown;
 }
 
+export interface CandidateContactInfo {
+  name?: string | null;
+  email?: string | null;
+  github?: string | null;
+  linkedin?: string | null;
+  portfolio?: string | null;
+  phone?: string | null;
+  cvFileName?: string | null;
+}
+
 export interface AnalyzeResponse {
   success: boolean;
   message: string;
   file?: UploadedFileResponse;
   analysis?: Record<string, unknown>;
   text?: string;
+  contactInfo?: CandidateContactInfo;
   coldEmail?: ColdEmailData;
   [key: string]: unknown;
 }

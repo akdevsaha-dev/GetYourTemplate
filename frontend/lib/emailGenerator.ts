@@ -87,13 +87,103 @@ export const DEFAULT_TECH_STACK = [
   "Distributed Caching",
 ];
 
+export interface CandidateContactInfo {
+  name?: string | null;
+  email?: string | null;
+  github?: string | null;
+  linkedin?: string | null;
+  portfolio?: string | null;
+  phone?: string | null;
+  cvFileName?: string | null;
+}
+
+/**
+ * Extracts candidate name and contact handles (Email, GitHub, LinkedIn, Portfolio, Phone)
+ * directly from raw resume text.
+ */
+export function parseResumeContact(
+  resumeText?: string,
+  fallbackFileName?: string
+): CandidateContactInfo {
+  if (!resumeText) {
+    return {
+      name: null,
+      email: null,
+      github: null,
+      linkedin: null,
+      portfolio: null,
+      phone: null,
+      cvFileName: fallbackFileName || "resume.pdf",
+    };
+  }
+
+  // 1. Candidate Name (usually the first non-empty text line)
+  const lines = resumeText.split("\n").map((l) => l.trim()).filter(Boolean);
+  let name: string | null = null;
+  for (const line of lines.slice(0, 5)) {
+    const clean = line.split("-")[0]?.split("—")[0]?.split("|")[0]?.split("•")[0]?.trim();
+    if (
+      clean &&
+      clean.length >= 2 &&
+      clean.length <= 40 &&
+      !clean.includes("@") &&
+      !clean.toLowerCase().includes("resume") &&
+      !clean.toLowerCase().includes("curriculum") &&
+      !clean.toLowerCase().includes("engineer") &&
+      !clean.toLowerCase().includes("developer")
+    ) {
+      name = clean;
+      break;
+    }
+  }
+
+  // 2. Email Address
+  const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/;
+  const emailMatch = resumeText.match(emailRegex);
+  const email = emailMatch ? emailMatch[0].trim() : null;
+
+  // 3. GitHub Link / Username
+  const githubRegex = /(?:https?:\/\/)?(?:www\.)?github\.com\/([A-Za-z0-9_-]+)/i;
+  const ghMatch = resumeText.match(githubRegex);
+  let github: string | null = null;
+  if (ghMatch && ghMatch[1] && !["repos", "pulls", "issues", "explore"].includes(ghMatch[1].toLowerCase())) {
+    github = `github.com/${ghMatch[1]}`;
+  }
+
+  // 4. LinkedIn Link
+  const linkedinRegex = /(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/([A-Za-z0-9_-]+)/i;
+  const liMatch = resumeText.match(linkedinRegex);
+  const linkedin = liMatch && liMatch[1] ? `linkedin.com/in/${liMatch[1]}` : null;
+
+  // 5. Portfolio or Personal Site
+  const portfolioRegex = /(?:https?:\/\/)?(?:www\.)?([A-Za-z0-9_-]+\.(?:dev|me|io|design|tech|app))\b/i;
+  const portMatch = resumeText.match(portfolioRegex);
+  const portfolio = portMatch && portMatch[1] ? portMatch[1] : null;
+
+  // 6. Phone number
+  const phoneRegex = /(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/;
+  const phoneMatch = resumeText.match(phoneRegex);
+  const phone = phoneMatch ? phoneMatch[0].trim() : null;
+
+  return {
+    name,
+    email,
+    github,
+    linkedin,
+    portfolio,
+    phone,
+    cvFileName: fallbackFileName || "resume.pdf",
+  };
+}
+
 export function generateCraftedEmails(
   companyRaw: string,
   _recipient: TargetRecipient,
   tone: TonePreset,
   brevity: BrevityMode = "standard",
   customCandidateName: string = "Alex Chen",
-  customRecipientName?: string
+  customRecipientName?: string,
+  contactInfo?: CandidateContactInfo
 ): Record<EmailAngle, GeneratedEmail> {
   const parts = companyRaw.split("—");
   const company = parts[0]?.trim() || "Linear";
@@ -104,6 +194,20 @@ export function generateCraftedEmails(
   const engLeadGreeting = recName ? `Hi ${recName},` : `Hi ${company} Engineering Team,`;
   const recruiterGreeting = recName ? `Hi ${recName},` : `Hi ${company} Recruiting Team,`;
   const followUpGreeting = recName ? `Hi ${recName},` : `Hi ${company} Team,`;
+
+  // Candidate identity and contact handles with graceful editable placeholders
+  const candidateName = customCandidateName?.trim() || contactInfo?.name?.trim() || "Your Name";
+  const githubLink = contactInfo?.github?.trim() || "github.com/[your-github]";
+  const emailLink = contactInfo?.email?.trim() || "[your-email@domain.com]";
+  const portfolioLink = contactInfo?.portfolio?.trim() || contactInfo?.linkedin?.trim() || "[your-portfolio.dev]";
+  const cvFile = contactInfo?.cvFileName?.trim() || "resume.pdf";
+  const phoneInfo = contactInfo?.phone?.trim();
+
+  // Dynamic, non-hallucinated signoffs
+  const founderSignoff = `Best,\n${candidateName}\n${githubLink} • ${emailLink}`;
+  const engLeadSignoff = `Cheers,\n${candidateName}\nResume attached: ${cvFile}${contactInfo?.github ? ` • ${contactInfo.github.trim()}` : ""}`;
+  const recruiterSignoff = `Warm regards,\n${candidateName}\n${phoneInfo ? `Phone: ${phoneInfo} • ` : ""}${emailLink} • ${portfolioLink}`;
+  const followUpSignoff = `Best,\n${candidateName}`;
 
   // Tone modifiers
   const isPunchy = tone === "punchy";
@@ -153,7 +257,7 @@ export function generateCraftedEmails(
   const engLeadCta = `Would love to share our benchmark learnings if you have 10 mins this week. Are you free Thursday morning?`;
 
   // Recruiter / Talent variation
-  const recruiterSubject = `${customCandidateName} — Candidate for ${role} @ ${company}`;
+  const recruiterSubject = `${candidateName} — Candidate for ${role} @ ${company}`;
   const recruiterIntro = `Hope your week is going well. Reaching out directly regarding the ${role} opening at ${company}.`;
   const recruiterProof = `Track record: Led backend infra scaling from Series A to B, cut p99 latency by 43% across 12M daily events, and built zero-jank WASM client pipelines. Strong match for ${company}'s tech stack (TypeScript, Go, PostgreSQL).`;
   const recruiterPitch = `I follow ${company}'s engineering philosophy closely and believe my background in high-throughput real-time systems aligns directly with your roadmap goals for this quarter.`;
@@ -181,7 +285,7 @@ export function generateCraftedEmails(
       subject: founderSubject,
       subjectAlternatives: [
         `Quick thought on ${company}'s real-time sync & latency`,
-        `${customCandidateName} / ${company} — Staff engineer & latency reduction`,
+        `${candidateName} / ${company} — Staff engineer & latency reduction`,
         `Latency reduction pattern for ${company}'s offline-first cache`,
       ],
       greeting: founderGreeting,
@@ -189,7 +293,7 @@ export function generateCraftedEmails(
       bodyProof: founderProof,
       bodyPitch: founderPitch,
       cta: founderCta,
-      signoff: `Best,\n${customCandidateName}\ngithub.com/alexchen • alex@engineer.dev`,
+      signoff: founderSignoff,
       highlightNotes: "Direct, metric-backed hook built for 3-second founder triage.",
     },
     eng_lead: {
@@ -214,7 +318,7 @@ export function generateCraftedEmails(
       bodyProof: engLeadProof,
       bodyPitch: engLeadPitch,
       cta: engLeadCta,
-      signoff: `Cheers,\n${customCandidateName}\nResume attached: alex_chen_cv.pdf`,
+      signoff: engLeadSignoff,
       highlightNotes: "Systems architecture depth proving immediate technical capability.",
     },
     recruiter: {
@@ -230,8 +334,8 @@ export function generateCraftedEmails(
       },
       subject: recruiterSubject,
       subjectAlternatives: [
-        `${customCandidateName} — Candidate for ${role} @ ${company}`,
-        `Candidate track record: ${role} — ${customCandidateName}`,
+        `${candidateName} — Candidate for ${role} @ ${company}`,
+        `Candidate track record: ${role} — ${candidateName}`,
         `Application & technical background: ${role} @ ${company}`,
       ],
       greeting: recruiterGreeting,
@@ -239,7 +343,7 @@ export function generateCraftedEmails(
       bodyProof: recruiterProof,
       bodyPitch: recruiterPitch,
       cta: recruiterCta,
-      signoff: `Warm regards,\n${customCandidateName}\nPhone: (415) 890-4421 • Portfolio: alexchen.dev`,
+      signoff: recruiterSignoff,
       highlightNotes: "Clear competencies and verified achievements aligned with ATS job specs.",
     },
     follow_up: {
@@ -264,7 +368,7 @@ export function generateCraftedEmails(
       bodyProof: followUpProof,
       bodyPitch: followUpPitch,
       cta: followUpCta,
-      signoff: `Best,\n${customCandidateName}`,
+      signoff: followUpSignoff,
       highlightNotes: "Zero-pressure check-in offering immediate un-gated technical value.",
     },
   };

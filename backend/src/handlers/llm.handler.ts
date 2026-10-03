@@ -29,6 +29,23 @@ export const handleAnalyze = async (req: Request, res: Response) => {
     const resumeText = await extractTextFromPdf(file.buffer, file.originalname);
     const coldEmail = await returnColdEmail(resumeText, bodyValidation.data);
 
+    // Extract contact links from resume text
+    const emailMatch = resumeText.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/);
+    const githubMatch = resumeText.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/([A-Za-z0-9_-]+)/i);
+    const linkedinMatch = resumeText.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/([A-Za-z0-9_-]+)/i);
+    const portfolioMatch = resumeText.match(/(?:https?:\/\/)?(?:www\.)?([A-Za-z0-9_-]+\.(?:dev|me|io|design|tech|app))\b/i);
+
+    const ghUser = githubMatch && githubMatch[1] ? githubMatch[1] : null;
+    const liUser = linkedinMatch && linkedinMatch[1] ? linkedinMatch[1] : null;
+    const portDomain = portfolioMatch && portfolioMatch[1] ? portfolioMatch[1] : null;
+
+    const contactInfo = {
+      email: emailMatch ? emailMatch[0] : null,
+      github: ghUser && !["repos", "pulls", "issues"].includes(ghUser.toLowerCase()) ? `github.com/${ghUser}` : null,
+      linkedin: liUser ? `linkedin.com/in/${liUser}` : null,
+      portfolio: portDomain,
+    };
+
     const responseData = {
       success: true,
       message: "Resume uploaded and analyzed successfully",
@@ -38,6 +55,7 @@ export const handleAnalyze = async (req: Request, res: Response) => {
         size: file.size,
       },
       text: resumeText,
+      contactInfo,
       coldEmail,
     };
 

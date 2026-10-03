@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useSyncExternalStore, Suspense } from "react";
+import React, { useState, useMemo, useEffect, useSyncExternalStore, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -35,6 +35,8 @@ import {
   DEFAULT_EXTRACTED_METRICS,
   DEFAULT_TECH_STACK,
   generateCraftedEmails,
+  parseResumeContact,
+  CandidateContactInfo,
 } from "@/lib/emailGenerator";
 import type { ColdEmailData } from "@/lib/api";
 
@@ -103,14 +105,71 @@ function CraftStudio() {
   const liveColdEmail = sessionData?.backendResponse?.coldEmail as ColdEmailData | undefined;
   const liveResumeText = sessionData?.backendResponse?.text as string | undefined;
 
-  // Extract candidate name from resume if present
-  const candidateDisplayName = useMemo(() => {
-    if (!liveResumeText) return "Alex Chen";
-    const firstLine = liveResumeText.split("\n").find((l: string) => l.trim().length > 0);
-    if (!firstLine) return "Alex Chen";
-    const cleanName = firstLine.split("-")[0]?.split("—")[0]?.trim();
-    return cleanName && cleanName.length > 2 && cleanName.length < 35 ? cleanName : "Alex Chen";
-  }, [liveResumeText]);
+  // Extract candidate contact details from resume text, backend response, or session cache
+  const initialContact = useMemo<CandidateContactInfo>(() => {
+    const parsed = parseResumeContact(liveResumeText, fileName);
+    const backendContact = sessionData?.backendResponse?.contactInfo as CandidateContactInfo | undefined;
+    const sessionContact = sessionData?.candidateContact as CandidateContactInfo | undefined;
+
+    return {
+      name:
+        sessionContact?.name ||
+        backendContact?.name ||
+        parsed.name ||
+        (sessionData?.isSample ? "Alex Chen" : "Your Name"),
+      email: sessionContact?.email || backendContact?.email || parsed.email || "",
+      github: sessionContact?.github || backendContact?.github || parsed.github || "",
+      linkedin: sessionContact?.linkedin || backendContact?.linkedin || parsed.linkedin || "",
+      portfolio: sessionContact?.portfolio || backendContact?.portfolio || parsed.portfolio || "",
+      phone: sessionContact?.phone || backendContact?.phone || parsed.phone || "",
+      cvFileName: fileName,
+    };
+  }, [liveResumeText, fileName, sessionData]);
+
+  const [candidateContact, setCandidateContact] = useState<CandidateContactInfo>(initialContact);
+  const [draftContact, setDraftContact] = useState<CandidateContactInfo>(initialContact);
+  const [isEditingContact, setIsEditingContact] = useState(false);
+
+  // Sync state if resume text / session data loads after initial mount
+  useEffect(() => {
+    if (initialContact.name && initialContact.name !== "Your Name") {
+      setCandidateContact((prev) => ({
+        ...initialContact,
+        ...prev,
+        name: prev.name && prev.name !== "Your Name" ? prev.name : initialContact.name,
+        email: prev.email || initialContact.email,
+        github: prev.github || initialContact.github,
+      }));
+      setDraftContact((prev) => ({
+        ...initialContact,
+        ...prev,
+        name: prev.name && prev.name !== "Your Name" ? prev.name : initialContact.name,
+        email: prev.email || initialContact.email,
+        github: prev.github || initialContact.github,
+      }));
+    }
+  }, [initialContact]);
+
+  const candidateDisplayName = candidateContact.name?.trim() || "Your Name";
+
+  const handleSaveCandidateContact = (updated: CandidateContactInfo) => {
+    setCandidateContact(updated);
+    setIsEditingContact(false);
+    if (typeof window !== "undefined") {
+      try {
+        const stored = sessionStorage.getItem("pitchcraft_data");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          sessionStorage.setItem(
+            "pitchcraft_data",
+            JSON.stringify({ ...parsed, candidateContact: updated })
+          );
+        }
+      } catch (e) {
+        console.error("Failed to update session storage candidate contact", e);
+      }
+    }
+  };
 
   // Dynamic Recipient Name (e.g. from query params, session, or edited in studio)
   const initialRecipientName =
@@ -170,7 +229,7 @@ function CraftStudio() {
   // Editable body state override
   const [customBodyOverride, setCustomBodyOverride] = useState<string | null>(null);
 
-  // Generate dynamic email sets based on company, tone, brevity
+  // Generate dynamic email sets based on company, tone, brevity, and parsed contact info
   const generatedEmails = useMemo(() => {
     return generateCraftedEmails(
       companyInput,
@@ -178,9 +237,10 @@ function CraftStudio() {
       tone,
       brevity,
       candidateDisplayName,
-      recipientName
+      recipientName,
+      candidateContact
     );
-  }, [companyInput, recipient, tone, brevity, candidateDisplayName, recipientName]);
+  }, [companyInput, recipient, tone, brevity, candidateDisplayName, recipientName, candidateContact]);
 
   const baseEmail = generatedEmails[activeAngle];
 
@@ -351,6 +411,107 @@ function CraftStudio() {
           >
             Save
           </button>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderSignoff = () => (
+    <div className="pt-3 border-t border-stone-100 dark:border-stone-800/80 mt-2 space-y-3">
+      {!isEditingContact ? (
+        <div className="flex items-start justify-between gap-4 group">
+          <div className="text-stone-600 dark:text-stone-300 whitespace-pre-line text-sm leading-relaxed font-sans">
+            {currentEmail.signoff}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setDraftContact(candidateContact);
+              setIsEditingContact(true);
+            }}
+            className="text-[11px] text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 opacity-60 hover:opacity-100 transition-opacity underline cursor-pointer inline-flex items-center gap-1 shrink-0 pt-0.5"
+            title="Personalize your signature, email, and GitHub links"
+          >
+            <Edit3 className="w-3 h-3" />
+            Edit signature & links
+          </button>
+        </div>
+      ) : (
+        <div className="p-4 rounded-2xl bg-stone-50 dark:bg-stone-900 border border-stone-200 dark:border-stone-800 space-y-3 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-stone-900 dark:text-white uppercase tracking-wider text-[11px]">
+              Edit Signature & Links
+            </span>
+            <span className="text-[11px] text-stone-400">
+              Leave blank to keep clean placeholder
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-medium text-stone-500 mb-1">
+                Your Name
+              </label>
+              <input
+                type="text"
+                value={draftContact.name || ""}
+                onChange={(e) => setDraftContact((prev) => ({ ...prev, name: e.target.value }))}
+                placeholder="e.g. Akdev Saha"
+                className="w-full px-3 py-1.5 rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-950 text-stone-900 dark:text-white text-xs focus:outline-none focus:border-stone-900 dark:focus:border-white"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-stone-500 mb-1">
+                Email Address
+              </label>
+              <input
+                type="email"
+                value={draftContact.email || ""}
+                onChange={(e) => setDraftContact((prev) => ({ ...prev, email: e.target.value }))}
+                placeholder="e.g. akdev@gmail.com"
+                className="w-full px-3 py-1.5 rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-950 text-stone-900 dark:text-white text-xs focus:outline-none focus:border-stone-900 dark:focus:border-white"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-stone-500 mb-1">
+                GitHub Handle or URL
+              </label>
+              <input
+                type="text"
+                value={draftContact.github || ""}
+                onChange={(e) => setDraftContact((prev) => ({ ...prev, github: e.target.value }))}
+                placeholder="e.g. github.com/akdevsaha"
+                className="w-full px-3 py-1.5 rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-950 text-stone-900 dark:text-white text-xs focus:outline-none focus:border-stone-900 dark:focus:border-white"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-stone-500 mb-1">
+                Portfolio / Website URL
+              </label>
+              <input
+                type="text"
+                value={draftContact.portfolio || ""}
+                onChange={(e) => setDraftContact((prev) => ({ ...prev, portfolio: e.target.value }))}
+                placeholder="e.g. akdev.dev"
+                className="w-full px-3 py-1.5 rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-950 text-stone-900 dark:text-white text-xs focus:outline-none focus:border-stone-900 dark:focus:border-white"
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setIsEditingContact(false)}
+              className="px-3 py-1.5 rounded-lg text-stone-600 dark:text-stone-400 hover:bg-stone-200/60 dark:hover:bg-stone-800 text-xs font-medium cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSaveCandidateContact(draftContact)}
+              className="px-3.5 py-1.5 rounded-lg bg-stone-900 text-white dark:bg-white dark:text-stone-950 text-xs font-medium cursor-pointer"
+            >
+              Save details
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -718,9 +879,7 @@ function CraftStudio() {
                     )}
 
                     {/* Signoff */}
-                    <div className="pt-3 text-stone-500 dark:text-stone-400 whitespace-pre-line text-sm">
-                      {currentEmail.signoff}
-                    </div>
+                    {renderSignoff()}
                   </>
                 ) : (
                   <>
@@ -764,9 +923,7 @@ function CraftStudio() {
                     </p>
 
                     {/* Signoff */}
-                    <div className="pt-3 text-stone-500 dark:text-stone-400 whitespace-pre-line text-sm">
-                      {currentEmail.signoff}
-                    </div>
+                    {renderSignoff()}
                   </>
                 )}
               </div>
