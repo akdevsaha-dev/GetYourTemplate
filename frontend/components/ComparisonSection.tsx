@@ -93,7 +93,7 @@ export default function ComparisonSection() {
             <div className="rounded-2xl bg-stone-50/70 dark:bg-[#0e1017]/70 border border-stone-200/70 dark:border-stone-800/70 p-4 text-xs text-stone-800 dark:text-stone-200 space-y-2.5 leading-relaxed mb-6">
               <div className="text-stone-400 text-[11px] font-mono">Subject: Quick observation on Linear&apos;s real-time sync & latency</div>
               <p>
-                &ldquo;Hi Karri, saw your recent note on offline sync. At my previous startup,
+                &ldquo;Hi Linear Team, saw your recent note on offline sync. At my previous startup,
                 I re-architected our Postgres pipeline, dropping write latency by <span className="text-amber-900 bg-amber-500/15 dark:text-amber-200 px-1 py-0.5 rounded-md font-medium">43% across 12M events</span>.&rdquo;
               </p>
               <p>

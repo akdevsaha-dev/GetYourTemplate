@@ -36,6 +36,7 @@ import {
   DEFAULT_TECH_STACK,
   generateCraftedEmails,
 } from "@/lib/emailGenerator";
+import type { ColdEmailData } from "@/lib/api";
 
 function CraftStudio() {
   const router = useRouter();
@@ -96,32 +97,142 @@ function CraftStudio() {
   const [customPrompt, setCustomPrompt] = useState("");
   const [isRegenerating, setIsRegenerating] = useState(false);
 
-  // Resume metadata
+  // Resume metadata & live backend analysis
   const fileName = sessionData?.fileName || "Alex_Chen_Staff_Engineer_Resume.pdf";
   const fileSize = sessionData?.fileSize || "248 KB";
+  const liveColdEmail = sessionData?.backendResponse?.coldEmail as ColdEmailData | undefined;
+  const liveResumeText = sessionData?.backendResponse?.text as string | undefined;
 
-  // Editable body state override
-  const [customBodyOverride, setCustomBodyOverride] = useState<string | null>(null);
+  // Extract candidate name from resume if present
+  const candidateDisplayName = useMemo(() => {
+    if (!liveResumeText) return "Alex Chen";
+    const firstLine = liveResumeText.split("\n").find((l: string) => l.trim().length > 0);
+    if (!firstLine) return "Alex Chen";
+    const cleanName = firstLine.split("-")[0]?.split("—")[0]?.trim();
+    return cleanName && cleanName.length > 2 && cleanName.length < 35 ? cleanName : "Alex Chen";
+  }, [liveResumeText]);
 
-  // Generate dynamic email sets based on company, tone, brevity
-  const generatedEmails = generateCraftedEmails(
-    companyInput,
-    recipient,
-    tone,
-    brevity,
-    "Alex Chen"
-  );
+  // Dynamic Recipient Name (e.g. from query params, session, or edited in studio)
+  const initialRecipientName =
+    searchParams.get("recipientName") ||
+    sessionData?.recipientName ||
+    "";
+  const [recipientName, setRecipientName] = useState(initialRecipientName);
+  const [isEditingRecipientName, setIsEditingRecipientName] = useState(false);
 
-  const currentEmail = generatedEmails[activeAngle];
+  const handleSaveRecipientName = (newName: string) => {
+    const trimmed = newName.trim();
+    setRecipientName(trimmed);
+    setIsEditingRecipientName(false);
+    if (typeof window !== "undefined") {
+      try {
+        const stored = sessionStorage.getItem("pitchcraft_data");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          sessionStorage.setItem("pitchcraft_data", JSON.stringify({ ...parsed, recipientName: trimmed }));
+        }
+      } catch (e) {
+        console.error("Failed to update session storage recipient name", e);
+      }
+    }
+  };
 
   // Derived company and role
   const parts = companyInput.split("—");
   const displayCompany = parts[0]?.trim() || "Linear";
   const displayRole = parts[1]?.trim() || "Product Engineer";
 
-  // Copy full email text
-  const handleCopyFullEmail = () => {
-    const emailText = customBodyOverride || [
+  // Dynamic greeting: uses custom recipient name if set, otherwise defaults cleanly to the company team
+  const dynamicGreeting = useMemo(() => {
+    if (recipientName.trim()) {
+      return `Hi ${recipientName.trim()},`;
+    }
+    if (activeAngle === "founder") {
+      return `Hi ${displayCompany} Team,`;
+    }
+    if (activeAngle === "eng_lead") {
+      return `Hi ${displayCompany} Engineering Team,`;
+    }
+    if (activeAngle === "recruiter") {
+      return `Hi ${displayCompany} Talent Team,`;
+    }
+    return `Hi ${displayCompany} Team,`;
+  }, [recipientName, activeAngle, displayCompany]);
+
+  // Clean live body to remove any LLM-generated salutation (e.g. "Hi Karri," or "Dear Team,")
+  const cleanLiveBody = useMemo(() => {
+    if (!liveColdEmail?.body) return "";
+    return liveColdEmail.body
+      .replace(/^(?:Hi|Hey|Hello|Dear)\s+[^,\n]+,?\s*\n*/i, "")
+      .trim();
+  }, [liveColdEmail?.body]);
+
+  // Editable body state override
+  const [customBodyOverride, setCustomBodyOverride] = useState<string | null>(null);
+
+  // Generate dynamic email sets based on company, tone, brevity
+  const generatedEmails = useMemo(() => {
+    return generateCraftedEmails(
+      companyInput,
+      recipient,
+      tone,
+      brevity,
+      candidateDisplayName,
+      recipientName
+    );
+  }, [companyInput, recipient, tone, brevity, candidateDisplayName, recipientName]);
+
+  const baseEmail = generatedEmails[activeAngle];
+
+  // Whether the live backend AI response applies to current view
+  const isLiveActive = Boolean(
+    liveColdEmail && (activeAngle === initialAngle || !generatedEmails[activeAngle])
+  );
+
+  const currentEmail = useMemo(() => {
+    if (isLiveActive && liveColdEmail) {
+      const activeText = cleanLiveBody || liveColdEmail.body;
+      const words = activeText.trim().split(/\s+/).filter(Boolean).length;
+      return {
+        ...baseEmail,
+        greeting: dynamicGreeting,
+        subject: liveColdEmail.subject || baseEmail.subject,
+        subjectAlternatives: [
+          liveColdEmail.subject,
+          ...(baseEmail.subjectAlternatives || []).filter((s: string) => s !== liveColdEmail.subject),
+        ],
+        bodyPitch: activeText,
+        bodyProof: liveColdEmail.closing || baseEmail.bodyProof,
+        stats: {
+          ...baseEmail.stats,
+          wordCount: words,
+          readTime: `~${Math.max(15, Math.round((words / 200) * 60))}s`,
+        },
+      };
+    }
+    return {
+      ...baseEmail,
+      greeting: dynamicGreeting,
+    };
+  }, [isLiveActive, liveColdEmail, cleanLiveBody, baseEmail, dynamicGreeting]);
+
+  // Build full email plain-text
+  const fullEmailText = useMemo(() => {
+    if (customBodyOverride) return customBodyOverride;
+    if (isLiveActive && liveColdEmail) {
+      return [
+        `Subject: ${currentEmail.subject}`,
+        ``,
+        currentEmail.greeting,
+        ``,
+        cleanLiveBody || liveColdEmail.body,
+        ``,
+        liveColdEmail.closing ? `Key Proof Metric: ${liveColdEmail.closing}` : ``,
+        ``,
+        currentEmail.signoff,
+      ].filter(Boolean).join("\n");
+    }
+    return [
       `Subject: ${currentEmail.subject}`,
       ``,
       currentEmail.greeting,
@@ -136,8 +247,11 @@ function CraftStudio() {
       ``,
       currentEmail.signoff,
     ].join("\n");
+  }, [customBodyOverride, isLiveActive, liveColdEmail, cleanLiveBody, currentEmail]);
 
-    navigator.clipboard.writeText(emailText);
+  // Copy full email text
+  const handleCopyFullEmail = () => {
+    navigator.clipboard.writeText(fullEmailText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2200);
   };
@@ -152,34 +266,29 @@ function CraftStudio() {
   // Mailto link for Gmail/Default Client
   const getMailtoLink = () => {
     const subject = encodeURIComponent(currentEmail.subject);
-    const body = encodeURIComponent(
-      customBodyOverride ||
-        `${currentEmail.greeting}\n\n${currentEmail.intro}\n\n${currentEmail.bodyProof}\n\n${currentEmail.bodyPitch}\n\n${currentEmail.cta}\n\n${currentEmail.signoff}`
-    );
+    const bodyText = isLiveActive && liveColdEmail
+      ? `${currentEmail.greeting}\n\n${cleanLiveBody || liveColdEmail.body}\n\n${liveColdEmail.closing ? `${liveColdEmail.closing}\n\n` : ""}${currentEmail.signoff}`
+      : `${currentEmail.greeting}\n\n${currentEmail.intro}\n\n${currentEmail.bodyProof}\n\n${currentEmail.bodyPitch}\n\n${currentEmail.cta}\n\n${currentEmail.signoff}`;
+    const body = encodeURIComponent(customBodyOverride || bodyText);
     return `mailto:?subject=${subject}&body=${body}`;
   };
 
   // Download TXT pitch
   const handleDownloadTxt = () => {
+    const bodyContent = isLiveActive && liveColdEmail
+      ? `${currentEmail.greeting}\n\n${cleanLiveBody || liveColdEmail.body}\n\n${liveColdEmail.closing ? `Key Proof Metric: ${liveColdEmail.closing}\n\n` : ""}${currentEmail.signoff}`
+      : `${currentEmail.greeting}\n\n${currentEmail.intro}\n\n${currentEmail.bodyProof}\n\n${currentEmail.bodyPitch}\n\n${currentEmail.cta}\n\n${currentEmail.signoff}`;
+
     const content = [
       `PITCHCRAFT AI — CRAFTED OUTREACH`,
       `Target: ${displayCompany} (${displayRole})`,
       `Angle: ${currentEmail.tabLabel}`,
       `Tone: ${tone.toUpperCase()}`,
+      `Generated by: ${isLiveActive && liveColdEmail ? "Gemini AI (Live)" : "AI Career Engine"}`,
       `----------------------------------------`,
       `Subject: ${currentEmail.subject}`,
       ``,
-      currentEmail.greeting,
-      ``,
-      currentEmail.intro,
-      ``,
-      currentEmail.bodyProof,
-      ``,
-      currentEmail.bodyPitch,
-      ``,
-      currentEmail.cta,
-      ``,
-      currentEmail.signoff,
+      customBodyOverride || bodyContent,
       ``,
       `----------------------------------------`,
       `Alternative Subjects:`,
@@ -204,6 +313,48 @@ function CraftStudio() {
       setCustomPrompt("");
     }, 600);
   };
+
+  const renderSalutation = () => (
+    <div className="flex items-center gap-2 group">
+      {!isEditingRecipientName ? (
+        <div className="font-medium text-stone-900 dark:text-white flex items-center gap-2">
+          <span>{currentEmail.greeting}</span>
+          <button
+            type="button"
+            onClick={() => setIsEditingRecipientName(true)}
+            className="text-[11px] text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 opacity-60 hover:opacity-100 transition-opacity underline cursor-pointer inline-flex items-center gap-1"
+            title="Personalize recipient name"
+          >
+            <Edit3 className="w-3 h-3" />
+            {recipientName ? "Edit name" : "Add name"}
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-1.5">
+          <span className="font-medium text-stone-900 dark:text-white">Hi</span>
+          <input
+            type="text"
+            autoFocus
+            value={recipientName}
+            onChange={(e) => setRecipientName(e.target.value)}
+            placeholder="Recipient name"
+            className="px-2.5 py-0.5 rounded-lg border border-stone-300 dark:border-stone-700 text-xs sm:text-sm bg-white dark:bg-stone-900 text-stone-900 dark:text-white focus:outline-none focus:border-stone-900 dark:focus:border-white"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSaveRecipientName(recipientName);
+            }}
+          />
+          <span className="font-medium text-stone-900 dark:text-white">,</span>
+          <button
+            type="button"
+            onClick={() => handleSaveRecipientName(recipientName)}
+            className="px-2 py-0.5 rounded-lg bg-stone-900 text-white dark:bg-white dark:text-stone-950 text-xs font-medium cursor-pointer"
+          >
+            Save
+          </button>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-[#fbfbf9] text-stone-900 dark:bg-[#0c0d12] dark:text-stone-100 relative selection:bg-stone-200 dark:selection:bg-stone-800 flex flex-col transition-colors duration-200">
@@ -241,9 +392,11 @@ function CraftStudio() {
           {/* Center: Live Status Indicator */}
           <div className="hidden md:inline-flex items-center gap-2 px-3 py-1 rounded-full border border-stone-200/80 dark:border-stone-800/80 bg-white/70 dark:bg-[#12141c]/70 text-xs font-medium text-stone-600 dark:text-stone-300 shadow-xs">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Pitches Formulated</span>
+            <span>{liveColdEmail ? "Live Gemini AI Outreach" : "Pitches Formulated"}</span>
             <span className="text-stone-300 dark:text-stone-700">•</span>
-            <span className="text-stone-500 dark:text-stone-400">Grounded in CV Metrics</span>
+            <span className="text-stone-500 dark:text-stone-400">
+              {liveColdEmail ? "Grounded in Real Resume" : "Grounded in CV Metrics"}
+            </span>
           </div>
 
           {/* Right: Actions */}
@@ -389,8 +542,13 @@ function CraftStudio() {
                         : "bg-white/70 hover:bg-stone-50 dark:bg-[#12141c]/70 dark:hover:bg-stone-900/60 border-stone-200/80 dark:border-stone-800/80 text-stone-700 dark:text-stone-300"
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center justify-between mb-1.5 gap-1.5">
                       <span className="text-xs font-semibold">{tab.label}</span>
+                      {tab.id === initialAngle && liveColdEmail && (
+                        <span className="px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 rounded">
+                          Live AI
+                        </span>
+                      )}
                     </div>
                     <span
                       className={`text-[10px] font-mono ${
@@ -514,6 +672,8 @@ function CraftStudio() {
                       value={
                         customBodyOverride !== null
                           ? customBodyOverride
+                          : isLiveActive && liveColdEmail
+                          ? `${currentEmail.greeting}\n\n${cleanLiveBody || liveColdEmail.body}\n\n${liveColdEmail.closing ? `Key Proof Metric: ${liveColdEmail.closing}\n\n` : ""}${currentEmail.signoff}`
                           : `${currentEmail.greeting}\n\n${currentEmail.intro}\n\n${currentEmail.bodyProof}\n\n${currentEmail.bodyPitch}\n\n${currentEmail.cta}\n\n${currentEmail.signoff}`
                       }
                       onChange={(e) => setCustomBodyOverride(e.target.value)}
@@ -529,10 +689,43 @@ function CraftStudio() {
                       </button>
                     </div>
                   </div>
+                ) : isLiveActive && liveColdEmail ? (
+                  <>
+                    {/* Dynamic Salutation */}
+                    {renderSalutation()}
+
+                    {/* Live Generated Cold Email Body */}
+                    <p className="whitespace-pre-line leading-relaxed text-stone-900 dark:text-stone-100">
+                      {cleanLiveBody || liveColdEmail.body}
+                    </p>
+
+                    {/* The Live Proof (Extracted from Resume) */}
+                    {liveColdEmail.closing && (
+                      <div className="pt-2">
+                        {showHighlights ? (
+                          <div className="p-4 rounded-2xl bg-amber-500/10 dark:bg-amber-500/15 border border-amber-400/40 text-amber-950 dark:text-amber-200 text-xs sm:text-sm">
+                            <span className="font-semibold block text-[11px] uppercase tracking-wider text-amber-700 dark:text-amber-400 mb-1">
+                              Resume Proof Metric (Grounded from CV)
+                            </span>
+                            {liveColdEmail.closing}
+                          </div>
+                        ) : (
+                          <div className="text-sm text-stone-600 dark:text-stone-300 italic border-l-2 border-stone-300 dark:border-stone-700 pl-3">
+                            {liveColdEmail.closing}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Signoff */}
+                    <div className="pt-3 text-stone-500 dark:text-stone-400 whitespace-pre-line text-sm">
+                      {currentEmail.signoff}
+                    </div>
+                  </>
                 ) : (
                   <>
-                    {/* Salutation */}
-                    <div>{currentEmail.greeting}</div>
+                    {/* Dynamic Salutation */}
+                    {renderSalutation()}
 
                     {/* Hook paragraph */}
                     <p>
@@ -761,7 +954,34 @@ function CraftStudio() {
               </div>
 
               <div className="space-y-3">
-                {DEFAULT_EXTRACTED_METRICS.slice(0, 3).map((item) => (
+                {liveColdEmail?.closing && (
+                  <div className="p-3.5 rounded-2xl bg-amber-500/10 dark:bg-amber-500/15 border border-amber-300/60 dark:border-amber-700/60 text-xs space-y-1.5">
+                    <div className="flex items-center gap-1.5 font-semibold text-amber-950 dark:text-amber-200">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                      Live Extracted Metric
+                    </div>
+                    <div className="text-amber-900/90 dark:text-amber-200/90 leading-snug">
+                      {liveColdEmail.closing}
+                    </div>
+                  </div>
+                )}
+
+                {liveResumeText && (
+                  <details className="text-xs group rounded-2xl border border-stone-200/60 dark:border-stone-800/60 bg-stone-50/50 dark:bg-[#0e1017]/50 p-3">
+                    <summary className="font-medium text-stone-700 dark:text-stone-300 cursor-pointer list-none flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5 text-stone-400" />
+                        Scanned Resume Text
+                      </span>
+                      <ChevronDown className="w-3.5 h-3.5 transition-transform group-open:rotate-180 text-stone-400" />
+                    </summary>
+                    <div className="mt-2.5 pt-2 border-t border-stone-200/60 dark:border-stone-800/60 max-h-48 overflow-y-auto text-[11px] font-mono text-stone-600 dark:text-stone-400 whitespace-pre-wrap leading-relaxed">
+                      {liveResumeText}
+                    </div>
+                  </details>
+                )}
+
+                {DEFAULT_EXTRACTED_METRICS.slice(0, liveColdEmail?.closing ? 2 : 3).map((item) => (
                   <div
                     key={item.id}
                     className="p-3 rounded-2xl bg-stone-50/80 dark:bg-[#0e1017]/80 border border-stone-200/60 dark:border-stone-800/60 text-xs space-y-1"

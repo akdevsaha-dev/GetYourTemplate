@@ -20,6 +20,7 @@ export const cargoBodyValidation = z.object({
   tone: z.enum(toneEnum, {
     message: "Invalid tone preset",
   }),
+  recipientName: z.string().trim().max(100).optional(),
 });
 
 export const cargoFileValidation = z.object({
@@ -30,4 +31,12 @@ export const cargoFileValidation = z.object({
   size: z.number().max(10 * 1024 * 1024, "Resume must be smaller than 10MB"),
 });
 
+
+export const coldEmailOutputSchema = z.object({
+  subject: z.string().describe("A high converting, punchy subject line under 8 words"),
+  body: z.string().describe("The cold email body paragraphs between 75 and 95 words. Direct, no generic fluff, NO greeting/salutation and NO sign-off"),
+  closing: z.string().describe("2-3 specific metrics or achievements pulled directly from the resume"),
+})
+
 export type cargoBodyInput = z.infer<typeof cargoBodyValidation>
+export type ColdEmailOutput = z.infer<typeof coldEmailOutputSchema>;

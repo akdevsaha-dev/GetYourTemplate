@@ -16,7 +16,7 @@ export const handleAnalyze = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Resume file is required" });
     }
 
-    const fileValidation = cargoBodyValidation.safeParse({
+    const fileValidation = cargoFileValidation.safeParse({
       mimetype: file.mimetype,
       size: file.size,
     });
@@ -28,7 +28,8 @@ export const handleAnalyze = async (req: Request, res: Response) => {
 
     const resumeText = await extractTextFromPdf(file.buffer, file.originalname);
     const coldEmail = await returnColdEmail(resumeText, bodyValidation.data);
-    return res.json({
+
+    const responseData = {
       success: true,
       message: "Resume uploaded and analyzed successfully",
       file: {
@@ -37,7 +38,17 @@ export const handleAnalyze = async (req: Request, res: Response) => {
         size: file.size,
       },
       text: resumeText,
-    });
+      coldEmail,
+    };
+
+    console.log("\n================= [HANDLER OUTPUT] =================");
+    console.log("File:", file.originalname, `(${file.size} bytes)`);
+    console.log("Extracted Text Preview:", resumeText.slice(0, 150) + "...");
+    console.log("LLM Cold Email:", JSON.stringify(coldEmail, null, 2));
+    console.log("Full JSON Response:\n", JSON.stringify(responseData, null, 2));
+    console.log("=====================================================\n");
+
+    return res.json(responseData);
   } catch (err: any) {
     console.error("handleAnalyze error:", err);
     return res.status(500).json({

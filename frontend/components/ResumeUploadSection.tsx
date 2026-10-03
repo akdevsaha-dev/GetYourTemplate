@@ -49,6 +49,7 @@ export default function ResumeUploadSection({
   const [file, setFile] = useState<UploadedFileState | null>(null);
   const [recipient, setRecipient] = useState<TargetRecipient>("founder");
   const [targetCompany, setTargetCompany] = useState("");
+  const [recipientName, setRecipientName] = useState("");
   const [tone, setTone] = useState<TonePreset>("punchy");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -67,17 +68,20 @@ export default function ResumeUploadSection({
           fileSize: file.size,
           isSample: file.isSample,
           recipient,
+          recipientName: recipientName.trim(),
           targetCompany: targetCompany || "Linear — Senior Product Engineer",
           tone,
           backendResponse: file.backendResponse,
         })
       );
     }
-    router.push(
-      `/craft?company=${encodeURIComponent(
-        targetCompany || "Linear — Senior Product Engineer"
-      )}&recipient=${recipient}&tone=${tone}`
-    );
+    const query = new URLSearchParams({
+      company: targetCompany || "Linear — Senior Product Engineer",
+      recipient,
+      tone,
+      ...(recipientName.trim() ? { recipientName: recipientName.trim() } : {}),
+    });
+    router.push(`/craft?${query.toString()}`);
   };
 
   // Load sample resume helper
@@ -194,6 +198,7 @@ export default function ResumeUploadSection({
         recipient,
         company: targetCompany || "Linear — Senior Product Engineer",
         tone,
+        recipientName: recipientName.trim() || undefined,
         onProgress: (pct) => {
           setScanProgress(Math.max(15, Math.min(90, pct)));
         },
@@ -218,6 +223,7 @@ export default function ResumeUploadSection({
             fileSize: file.size,
             isSample: file.isSample,
             recipient,
+            recipientName: recipientName.trim(),
             targetCompany: targetCompany || "Linear — Senior Product Engineer",
             tone,
             backendResponse: response,
@@ -242,7 +248,7 @@ export default function ResumeUploadSection({
           setErrorMessage(`Backend error: ${err.response.data.error}`);
         } else if (err.code === "ERR_NETWORK" || err.message?.includes("Network Error")) {
           setErrorMessage(
-            "Could not connect to backend at http://localhost:3000/analyse. Please verify your backend server is running."
+            "Could not connect to backend at http://localhost:5001/analyse. Please verify your backend server is running."
           );
         } else {
           setErrorMessage(err.message || "Failed to upload file to backend.");
@@ -584,6 +590,28 @@ export default function ResumeUploadSection({
                 })}
               </div>
             </div>
+
+            {/* Row 3: Recipient Name (Optional) */}
+            <div className="sm:col-span-2">
+              <div className="flex items-center justify-between mb-2.5">
+                <label className="text-xs font-semibold uppercase tracking-wider text-stone-700 dark:text-stone-300 flex items-center gap-2">
+                  <UserCheck className="w-4 h-4 text-stone-500" />
+                  Recipient Name <span className="text-[11px] font-normal text-stone-400 lowercase">(optional)</span>
+                </label>
+                <span className="text-xs text-stone-400">
+                  {recipientName.trim()
+                    ? `Salutation: "Hi ${recipientName.trim()},"`
+                    : `Defaults to "Hi ${(targetCompany.split("—")[0]?.trim() || "Linear")} Team,"`}
+                </span>
+              </div>
+              <input
+                type="text"
+                value={recipientName}
+                onChange={(e) => setRecipientName(e.target.value)}
+                placeholder="e.g. Karri Saarinen, Sam Altman, or leave blank to address team"
+                className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-[#0e1017] border border-stone-200 dark:border-stone-800 text-sm text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-600 focus:outline-none focus:border-stone-900 dark:focus:border-white transition-all"
+              />
+            </div>
           </div>
         </div>
 
@@ -591,7 +619,7 @@ export default function ResumeUploadSection({
         <div className="mt-10 pt-6 border-t border-stone-100 dark:border-stone-800/60 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-xs text-stone-500 dark:text-stone-400">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Connected to backend API • localhost:3000/analyse</span>
+            <span>Connected to backend API • localhost:5001/analyse</span>
           </div>
 
           <button

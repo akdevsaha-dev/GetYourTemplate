@@ -92,11 +92,18 @@ export function generateCraftedEmails(
   _recipient: TargetRecipient,
   tone: TonePreset,
   brevity: BrevityMode = "standard",
-  customCandidateName: string = "Alex Chen"
+  customCandidateName: string = "Alex Chen",
+  customRecipientName?: string
 ): Record<EmailAngle, GeneratedEmail> {
   const parts = companyRaw.split("—");
   const company = parts[0]?.trim() || "Linear";
   const role = parts[1]?.trim() || "Senior Product Engineer";
+
+  const recName = customRecipientName?.trim();
+  const founderGreeting = recName ? `Hi ${recName},` : `Hi ${company} Team,`;
+  const engLeadGreeting = recName ? `Hi ${recName},` : `Hi ${company} Engineering Team,`;
+  const recruiterGreeting = recName ? `Hi ${recName},` : `Hi ${company} Recruiting Team,`;
+  const followUpGreeting = recName ? `Hi ${recName},` : `Hi ${company} Team,`;
 
   // Tone modifiers
   const isPunchy = tone === "punchy";
@@ -177,7 +184,7 @@ export function generateCraftedEmails(
         `${customCandidateName} / ${company} — Staff engineer & latency reduction`,
         `Latency reduction pattern for ${company}'s offline-first cache`,
       ],
-      greeting: `Hi Karri,`,
+      greeting: founderGreeting,
       intro: founderIntro,
       bodyProof: founderProof,
       bodyPitch: founderPitch,
@@ -202,7 +209,7 @@ export function generateCraftedEmails(
         `${company}'s local-first replication — quick question from an infra engineer`,
         `Notes on Kafka / Go event bus scaling for ${role}`,
       ],
-      greeting: `Hey Marcus,`,
+      greeting: engLeadGreeting,
       intro: engLeadIntro,
       bodyProof: engLeadProof,
       bodyPitch: engLeadPitch,
@@ -227,7 +234,7 @@ export function generateCraftedEmails(
         `Candidate track record: ${role} — ${customCandidateName}`,
         `Application & technical background: ${role} @ ${company}`,
       ],
-      greeting: `Hi Sarah,`,
+      greeting: recruiterGreeting,
       intro: recruiterIntro,
       bodyProof: recruiterProof,
       bodyPitch: recruiterPitch,
@@ -252,7 +259,7 @@ export function generateCraftedEmails(
         `60s demo: SQLite WASM worker threads for ${company}`,
         `Quick follow-up (no reply needed if busy)`,
       ],
-      greeting: `Hi Karri,`,
+      greeting: followUpGreeting,
       intro: followUpIntro,
       bodyProof: followUpProof,
       bodyPitch: followUpPitch,

@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -14,11 +14,20 @@ export interface UploadedFileResponse {
   size: number;
 }
 
+export interface ColdEmailData {
+  subject: string;
+  body: string;
+  closing?: string;
+  [key: string]: unknown;
+}
+
 export interface AnalyzeResponse {
   success: boolean;
   message: string;
   file?: UploadedFileResponse;
   analysis?: Record<string, unknown>;
+  text?: string;
+  coldEmail?: ColdEmailData;
   [key: string]: unknown;
 }
 
@@ -26,6 +35,7 @@ export interface UploadOptions {
   recipient?: string;
   company?: string;
   tone?: string;
+  recipientName?: string;
   onProgress?: (percent: number) => void;
 }
 
@@ -55,6 +65,9 @@ export async function uploadResume(
   }
   if (options?.tone) {
     formData.append("tone", options.tone);
+  }
+  if (options?.recipientName) {
+    formData.append("recipientName", options.recipientName);
   }
 
   const response = await apiClient.post<AnalyzeResponse>("/analyse", formData, {

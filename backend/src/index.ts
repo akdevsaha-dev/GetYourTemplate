@@ -19,6 +19,16 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 });
 
 const PORT = process.env.PORT || 5001;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server is listening on http://localhost:${PORT}`);
+});
+
+server.on("error", (err: any) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(`\n❌ Error: Port ${PORT} is already in use by another process.`);
+    console.error(`👉 Run this to free port ${PORT}: lsof -ti :${PORT} | xargs kill -9\n`);
+    process.exit(1);
+  } else {
+    console.error("Server error:", err);
+  }
 });
