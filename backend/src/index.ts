@@ -18,6 +18,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   return res.status(err.status || 500).json({ error: err.message || "Internal server error" });
 });
 
-app.listen("3000", () => {
-  console.log(`Server is listening on http://localhost:3000`);
+const PORT = process.env.PORT || 5001;
+app.listen(PORT, () => {
+  console.log(`Server is listening on http://localhost:${PORT}`);
 });
